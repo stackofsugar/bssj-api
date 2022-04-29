@@ -131,21 +131,22 @@ Used by `admin` to retrieve all registered `user`.
 
 #### Request Parameters
 
-| Key     | Value Type | Required | Description                 |
-| ------- | ---------- | -------- | --------------------------- |
-| `key`   | `string`   | `true`   | Your API key                |
-| `limit` | `int`      | `false`  | Limit of the retrieved data |
+| Key     | Value Type | Required | Description                                      |
+| ------- | ---------- | -------- | ------------------------------------------------ |
+| `key`   | `string`   | `true`   | Your API key                                     |
+| `page`  | `int`      | `false`  | The number of records retrieved in a single page |
+| `limit` | `int`      | `false`  | Limit of the retrieved data                      |
+
+This section of the API allows the use of pagination. User can opt-in to the pagination by assigning value to the `page` key, which will serve as the number of records one page can show. This is not required. If you don't want to use pagination, meaning all of the data will be shown in one response, you can opt-out from assigning value to this key.
 
 #### Example JSON Request
 
 ```json
 {
     "key": "383thuy4b34iu3y",
-    "limit": 2
+    "page": 2
 }
 ```
-
-> Mind that, if `limit` is used, the data will be truncated from the top by `id`
 
 #### Response
 
@@ -154,7 +155,13 @@ Used by `admin` to retrieve all registered `user`.
     "status": {
         "code": 200
     },
+    "page": {
+        "paginated": true,
+        "page_num": 1,
+        "out_of": 5
+    },
     "response": {
+        "records": "10",
         "users": [
             {
                 "id": 1,
