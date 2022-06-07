@@ -2,11 +2,18 @@
 
 namespace App\Exceptions;
 
+use Illuminate\Auth\AuthenticationException;
+use Illuminate\Http\Request;
+
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
+use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use Symfony\Component\HttpKernel\Exception\TooManyRequestsHttpException;
+use Symfony\Component\HttpKernel\Exception\UnauthorizedHttpException;
+use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
 use Throwable;
 
-class Handler extends ExceptionHandler
-{
+class Handler extends ExceptionHandler {
     /**
      * A list of exception types with their corresponding custom log levels.
      *
@@ -41,10 +48,64 @@ class Handler extends ExceptionHandler
      *
      * @return void
      */
-    public function register()
-    {
+    public function register() {
         $this->reportable(function (Throwable $e) {
             //
+        });
+
+        $this->renderable(function (NotFoundHttpException $e, Request $request) {
+            if ($request->wantsJson()) {
+                return response()->json([
+                    "status" => [
+                        "code" => 404,
+                        "message" => "Page not found",
+                    ],
+                ], 404);
+            }
+        });
+
+        $this->renderable(function (UnprocessableEntityHttpException $e, Request $request) {
+            if ($request->wantsJson()) {
+                return response()->json([
+                    "status" => [
+                        "code" => 404,
+                        "message" => "Unprocessable entity",
+                    ],
+                ], 422);
+            }
+        });
+
+        $this->renderable(function (TooManyRequestsHttpException $e, Request $request) {
+            if ($request->wantsJson()) {
+                return response()->json([
+                    "status" => [
+                        "code" => 429,
+                        "message" => "Too many requests",
+                    ],
+                ], 429);
+            }
+        });
+
+        $this->renderable(function (AuthenticationException $e, Request $request) {
+            if ($request->wantsJson()) {
+                return response()->json([
+                    "status" => [
+                        "code" => 401,
+                        "message" => "Access denied",
+                    ],
+                ], 401);
+            }
+        });
+
+        $this->renderable(function (UnauthorizedHttpException $e, Request $request) {
+            if ($request->wantsJson()) {
+                return response()->json([
+                    "status" => [
+                        "code" => 401,
+                        "message" => "Access denied",
+                    ],
+                ], 401);
+            }
         });
     }
 }

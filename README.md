@@ -30,16 +30,14 @@
 <tr><th>Base URL</th></tr>
 </thead>
 <tbody>
-<tr><th><code>api.?banksampah?.???</code></th></tr>
+<tr><th><code>api.???.???</code></th></tr>
 </tbody>
 </table>
 </div>
 
 # Authentication <a name="authentication"></a>
 
-**BSSJ API** will use API keys to authenticate connections to the server. Individual mobile instances can acquire said API by internal handshake operations. As the API keys carries many privilleges, it's important to keep it secure in the internal mobile app system.
-
-For production, our **BSSJ API** will force users to use HTTPS. All calls from HTTP will fail and return a failure message. This is also the case for wrong/nonexistent API Key.
+**BSSJ API** will use **access tokens** to authenticate user requests. The access token can be used by attaching a client's request header `Authorization: Bearer <your access token here>` with `Authorization` as the header key and `Bearer <your token here>` as the value. The access token can be obtained when the user registered for an account or logged in to their account. As such, **BSSJ API** will force its users to use HTTPS.
 
 # Errors <a name="errors"></a>
 
@@ -60,48 +58,59 @@ All of the errors in the `4xx` range will contain an error code. A non-zero erro
 | `429`            | Too Many Requests | Too many request are made, client is rate limited                            |
 | `5xx`            | Server Errors     | Something's wrong on the server's end                                        |
 
-## List of Error Codes <a name="errlist"></a>
-
-<hr />
-<h3 align="center">[ Under Construction ]</h3>
-<hr />
-
 # Core Resources <a name="core"></a>
 
 ## Users <a name="users"></a>
 
-Users represents user accounts registered to **BSSJ** mobile app. Guest of the **BSSJ** mobile app can register for an account, account holders can edit and delete their account, while admins can create, read, activate, update, and delete all registered accounts in the system.
+Users represents user accounts registered to **BSSJ** mobile app. Guest of the **BSSJ** mobile app can register for an account, account holders can edit and delete their account, while admins can create, read, update, and delete all registered accounts in the system.
+
+### Authentication Walls
+
+**BSSJ API** will have 2 different backend authentication wall whose terminology will be used for the rest of this documentation. The first wall, `auth:user`, will be owned by any registered clients on the site, while the second wall, `auth:admin`, will be owned by registered admins.
 
 ### Endpoints Type
 
--   [Retrieve all `user`s](#allusers)
--   [Retrieve a specific `user`](#oneuser)
--   [Authenticate `user` login](#authlogin)
--   [Register a `user`](#usrreg)
--   [Update `user`'s account profile](#userupdt)
--   [Delete `user`'s account](#usrdel)
+-   [Authenticate account login](#end-auth)
+-   [Register an account](#end-register)
+-   [Logout / destroy access token](#end-logout)
+-   [Get profile](#end-getprofile)
+-   [Edit Profile](#end-editprofile)
+-   [`admin-only` Retrieve all user profiles](#end-getuserprofile)
+-   [`admin-only` Retrieve a user profile by ID / username](#end-getuserprofileby)
+-   [`admin-only` Edit a user profile by ID / username](#end-edituserprofileby)
+-   Helpers:
+    -   Login and admin check
+    -   API status
 
 ### Endpoints
 
-| Method   | URI                    | Note         |
-| -------- | ---------------------- | ------------ |
-| `GET`    | `/v1/users/all`        | `admin`-only |
-| `GET`    | `/v1/users/by/:id`     |              |
-| `GET`    | `/v1/users/auth`       |              |
-| `POST`   | `/v1/users/register`   |              |
-| `PATCH`  | `/v1/users/update/:id` |              |
-| `DELETE` | `/v1/users/delete/:id` |              |
+| Method | URI                         | Note                               |
+| ------ | --------------------------- | ---------------------------------- |
+| `POST` | `/login`                    | `guest-only` Authenticate          |
+| `POST` | `/register`                 | `guest-only` Register              |
+| `GET`  | `/logout`                   | `user-only` Logout / Destroy       |
+| `GET`  | `/profile`                  | `user-only` Get profile            |
+| `POST` | `/profile/update`           | `user-only` Update profile         |
+| `GET`  | `/admin/profile/get/all`    | `admin-only` Get all user profiles |
+| `GET`  | `/admin/profile/get/:id`    | `admin-only` Get a user profile    |
+| `POST` | `/admin/profile/update/:id` | `admin-only` Edit a user profile   |
+| `GET`  | `/`                         | API status                         |
+| `GET`  | `/logged`                   | Login status                       |
+| `GET`  | `/admin`                    | Admin status                       |
 
-### The `user` Object
+### The User Object
+
+The **User** object, that is, the entry on the database representing a single user, is defined below:
 
 ```json
 {
     "id": 1,
-    "username": "John Doe",
+    "username": "jondoe",
+    "fullname": "John Doe",
     "address": "Upper Manhattan, New York",
     "phone": "085151515151",
     "email": "john.doe@mymail.com",
-    "password": "892f6100b1bd47...",
+    "password": "$2y$10$11WHQ6ykJvmUPzDDenT...",
     "is_admin": false,
     "is_active": true
 }
@@ -109,114 +118,436 @@ Users represents user accounts registered to **BSSJ** mobile app. Guest of the *
 
 #### Attributes
 
-| Name        | Data Type | Description                                         |
-| ----------- | --------- | --------------------------------------------------- |
-| `id`        | `integer` | **Unique** identifier for the object                |
-| `username`  | `string`  | **Unique** username for each user                   |
-| `fullname`  | `string`  | Full name of each user                              |
-| `address`   | `string`  | Arbitrary address of each user                      |
-| `phone`     | `string`  | Phone number of each user                           |
-| `email`     | `string`  | Email addresses of each user                        |
-| `password`  | `string`  | SHA256/MD5-encrypted password of each user          |
-| `is_admin`  | `boolean` | A boolean value indicating each user's privilege    |
-| `is_active` | `boolean` | A boolean value indicating user's activation status |
+| Name        | Data Type | Note                           |
+| ----------- | --------- | ------------------------------ |
+| `id`        | `int`     | `unique`                       |
+| `username`  | `string`  | `unique`                       |
+| `fullname`  | `string`  |                                |
+| `address`   | `string`  |                                |
+| `phone`     | `string`  |                                |
+| `email`     | `string`  |                                |
+| `password`  | `string`  | Password-hashed using `bcrypt` |
+| `is_admin`  | `boolean` | Tags a user as an admin        |
+| `is_active` | `boolean` | Use description TBD            |
 
-### Retrieve all `user`s <a name="allusers"></a>
+### Authenticate Account Login <a name="end-auth"></a>
 
-Used by `admin` to retrieve all registered `user`.
+Authenticates credentials provided by the user, and if matches database, returns an access token that can be used by the client. The access token **CANNOT** be shown again, so it's up to the mobile app's developer to store this token securely.
 
-| Method | URI             | Note         |
-| ------ | --------------- | ------------ |
-| `GET`  | `/v1/users/all` | `admin`-only |
+| Method | URI      |
+| ------ | -------- |
+| `POST` | `/login` |
 
-#### Request Parameters
+#### Request Parameter
 
-| Key     | Value Type | Required | Description                                      |
-| ------- | ---------- | -------- | ------------------------------------------------ |
-| `key`   | `string`   | `true`   | Your API key                                     |
-| `page`  | `int`      | `false`  | The number of records retrieved in a single page |
-| `limit` | `int`      | `false`  | Limit of the retrieved data                      |
+| Key        | Value Type | Note       |
+| ---------- | ---------- | ---------- |
+| `username` | `string`   | `required` |
+| `password` | `string`   | `required` |
 
-This section of the API allows the use of pagination. User can opt-in to the pagination by assigning value to the `page` key, which will serve as the number of records one page can show. This is not required. If you don't want to use pagination, meaning all of the data will be shown in one response, you can opt-out from assigning value to this key.
+#### Failure Condition
 
-#### Example JSON Request
+-   Wrong `username` or `password`
+
+#### Example Request
 
 ```json
 {
-    "key": "383thuy4b34iu3y",
-    "page": 2
+    "username": "jdoe",
+    "password": "jdoeloveicecream"
 }
 ```
 
-#### Response
+#### Example Success Response
 
 ```json
 {
     "status": {
         "code": 200
     },
-    "page": {
-        "paginated": true,
-        "page_num": 1,
-        "out_of": 5
+    "response": {
+        "message": "Authentication successful",
+        "token": "<your access token here>"
+    }
+}
+```
+
+#### Example Failed Response (Wrong `username` or `password`)
+
+```json
+{
+    "status": {
+        "code": 401,
+        "message": "Unauthorized"
+    },
+    "response": "Wrong password or username"
+}
+```
+
+### Register an Account <a name="end-register"></a>
+
+Validates credentials provided by the user, and then storing it in the database if passed.
+
+| Method | URI         |
+| ------ | ----------- |
+| `POST` | `/register` |
+
+#### Request Parameter
+
+| Key        | Value Type     | Note                    |
+| ---------- | -------------- | ----------------------- |
+| `username` | `string`       | `required`              |
+| `fullname` | `string`       | `required`              |
+| `address`  | `string`       | `required`              |
+| `phone`    | `default(int)` | `required`              |
+| `email`    | `string`       | `required`              |
+| `password` | `string`       | `required` Raw password |
+
+#### Failure Condition
+
+-   Semantic failures, such as:
+    -   Attribute(s) already exists
+    -   Attribute(s) incomplete
+-   Validation failures, with the rules:
+    -   `username`: 3-255 characters, alphanumeric with dashes
+    -   `fullname`: 3-255 characters
+    -   `address`: 3-255 characters
+    -   `phone`: max 12 numerical characters
+    -   `email`: valid email format and DNS, max 255 characters
+
+#### Example Request
+
+```json
+{
+    "username": "jdoe",
+    "fullname": "John Doe",
+    "address": "Mountain View, California",
+    "phone": 775655142,
+    "email": "johnny@examplemail.org",
+    "password": "johndoeisthebest"
+}
+```
+
+#### Example Success Response
+
+```json
+{
+    "status": {
+        "code": 200
     },
     "response": {
-        "records": "10",
-        "users": [
+        "message": "User succesfully registered",
+        "username": "jdoe",
+        "token": "<your access token here>"
+    }
+}
+```
+
+#### Example Failed Response (username already exists)
+
+```json
+{
+    "status": {
+        "code": 422,
+        "message": "Unprocessable content"
+    },
+    "response": {
+        "username": ["The username has already been taken."]
+    }
+}
+```
+
+#### Example Failed Response (username not provided)
+
+```json
+{
+    "status": {
+        "code": 422,
+        "message": "Unprocessable content"
+    },
+    "response": {
+        "username": ["The username field is required."]
+    }
+}
+```
+
+#### Example Failed Response (Validation failures)
+
+```json
+{
+    "status": {
+        "code": 422,
+        "message": "Unprocessable content"
+    },
+    "response": {
+        "username": ["The username must be at least 3 characters."],
+        "phone": ["The phone must be a number."]
+    }
+}
+```
+
+### Logout / Destroy Access Token <a name="end-logout"></a>
+
+Destroys access token of the corresponding user.
+
+| Method | URI       |
+| ------ | --------- |
+| `get`  | `/logout` |
+
+#### Request Parameter
+
+None.
+
+#### Failure Condition
+
+None.
+
+#### Example Request
+
+```json
+{}
+```
+
+#### Example Success Response
+
+```json
+{
+    "status": {
+        "code": 200
+    },
+    "response": {
+        "message": "Token successfully invalidated"
+    }
+}
+```
+
+### Get Profile <a name="end-getprofile"></a>
+
+Retrieves profile of the corresponding user.
+
+| Method | URI        |
+| ------ | ---------- |
+| `GET`  | `/profile` |
+
+#### Request Parameter
+
+None.
+
+#### Failure Condition
+
+None.
+
+#### Example Request
+
+```json
+{}
+```
+
+#### Example Success Response
+
+```json
+{
+    "status": {
+        "code": 200
+    },
+    "response": {
+        "logged_in": true,
+        "user_info": {
+            "id": 1,
+            "username": "jdoe",
+            "fullname": "John Doe",
+            "address": "Mountain View, California",
+            "phone": "775655142",
+            "email": "johnny@examplemail.org",
+            "is_admin": 0,
+            "is_active": 0,
+            "created_at": "2022-05-12T09:25:39.000000Z",
+            "updated_at": "2022-05-13T06:39:54.000000Z"
+        }
+    }
+}
+```
+
+### Edit Profile <a name="end-editprofile"></a>
+
+Edits profile of the corresponding user.
+
+| Method | URI               |
+| ------ | ----------------- |
+| `POST` | `/profile/update` |
+
+#### Request Parameter
+
+At least one of the following attibutes should be provided.
+
+| Key        | Value Type     | Note |
+| ---------- | -------------- | ---- |
+| `username` | `string`       |      |
+| `fullname` | `string`       |      |
+| `address`  | `string`       |      |
+| `phone`    | `default(int)` |      |
+| `email`    | `string`       |      |
+| `password` | `string`       |      |
+
+#### Failure Condition
+
+-   None of the attributes is provided
+-   Validation failures with the same rules as the [register](#end-register) endpoint.
+
+#### Example Request
+
+```json
+{
+    "fullname": "Charlotte",
+    "address": "Upper Manhattan"
+}
+```
+
+#### Example Success Response
+
+```json
+{
+    "status": {
+        "code": 200
+    },
+    "response": {
+        "new_profile": {
+            "id": 5,
+            "username": "jdoe",
+            "fullname": "Charlotte",
+            "address": "Upper Manhattan",
+            "phone": "+16369462368",
+            "email": "jdoe@examplemail.org",
+            "is_admin": 0,
+            "is_active": 0,
+            "created_at": "2022-05-12T16:03:26.000000Z",
+            "updated_at": "2022-06-07T13:20:35.000000Z"
+        }
+    }
+}
+```
+
+#### Example Failed Response (None of the attributes is provided)
+
+```json
+{
+    "status": {
+        "code": 422,
+        "message": "Unprocessable content"
+    },
+    "response": {
+        "username": ["Atleast one attribute should be edited!"],
+        "fullname": ["Atleast one attribute should be edited!"],
+        "address": ["Atleast one attribute should be edited!"],
+        "phone": ["Atleast one attribute should be edited!"],
+        "email": ["Atleast one attribute should be edited!"],
+        "password": ["Atleast one attribute should be edited!"]
+    }
+}
+```
+
+### `admin-only` Retrieve All User Profiles <a name="end-getuserprofile"></a>
+
+Retrieves all user profiles from the database. The result **will always be** paginated, and the default items per page is 10 if not specified.
+
+| Method | URI              |
+| ------ | ---------------- |
+| `GET`  | `/admin/profile` |
+
+#### Request Parameter
+
+| Key          | Value Type     | Note                         |
+| ------------ | -------------- | ---------------------------- |
+| `page_limit` | `default(int)` | `optional`, defaults to 10   |
+| `page`       | `default(int)` | Access specified page number |
+
+#### Failure Condition
+
+<!-- Is it? Try empty users table? -->
+
+None.
+
+#### Example Request
+
+```json
+{
+    "page_limit": 5,
+    "page": 2
+}
+```
+
+#### Example Success Response
+
+```json
+{
+    "status": {
+        "code": 200
+    },
+    "response": {
+        "total_items": 42,
+        "items_per_page": 5,
+        "last_page": 9,
+        "current_page": 2,
+        "first_id_in_page": 6,
+        "last_id_in_page": 10,
+        "data": [
             {
-                "id": 1,
-                "username": "jdoe",
-                "fullname": "John Doe",
-                "address": "Upper Manhattan, New York",
-                "phone": "085151515151",
-                "email": "john.doe@mymail.com",
-                "password": "892f6100b1bd47...",
-                "is_admin": false,
-                "is_active": true
+                "id": 6,
+                "username": "purdy.frederik",
+                "fullname": "Turner Williamson",
+                "address": "570 Harley Stream\nNorth Alexandrechester, CA 71636-6164",
+                "phone": "+18508561766",
+                "email": "hermiston.holly@example.com",
+                "password": "$2y$10$MXd.KVlY7xBLblRzMZj25OOimt3.ucS0NHR6L4KV/BFzppNv3C7vG",
+                "is_admin": 0,
+                "is_active": 0,
+                "created_at": "2022-05-12T16:03:26.000000Z",
+                "updated_at": "2022-05-12T16:03:26.000000Z"
             },
             {
-                "id": 2,
-                "username": "dengklexz",
-                "fullname": "Pak Dengklek",
-                "address": "Sleman, Yogyakarta",
-                "phone": "085151515151",
-                "email": "dengklek@mymail.com",
-                "password": "c3f0a43bb3823...",
-                "is_admin": true,
-                "is_active": true
+                "id": 7,
+                "username": "sschneider",
+                "fullname": "Lysanne Dare",
+                "address": "778 Whitney Place\nNew Jamal, DE 06344",
+                "phone": "+17817860973",
+                "email": "margarete92@example.org",
+                "password": "$2y$10$a5o.13TuzwQ5L2Kck8.A9OluIZXXDLkAna/W1PS2tf44cuCLRBPbe",
+                "is_admin": 0,
+                "is_active": 0,
+                "created_at": "2022-05-12T16:03:26.000000Z",
+                "updated_at": "2022-05-12T16:03:26.000000Z"
             }
+            // ...
         ]
     }
 }
 ```
 
-> If there is no account in the system, the status code will still be `200`, and `users` will be an empty array.
+### `admin-only` Retrieve a User Profile by ID / Username <a name="end-getuserprofileby"></a>
 
-### Retrieve a specific `user` <a name="oneuser"></a>
+Retrieves a single user specified by username or user ID provided.
 
-Used to retrieve a specific `user` by it's `id`
+| Method | URI                           |
+| ------ | ----------------------------- |
+| `GET`  | `/admin/profile/get/:segment` |
 
-| Method | URI                |
-| ------ | ------------------ |
-| `GET`  | `/v1/users/by/:id` |
+#### Request Parameter
 
-#### Request Parameters
+None. This endpoint can be used in 2 ways, such as `localhost/admin/profile/get/2` to get the user profile of a user with user ID `2`, or `localhost/admin/profile/get/jdoe` to get the user profile of a user with username `jdoe`.
 
-| Key   | Value Type | Required | Description            |
-| ----- | ---------- | -------- | ---------------------- |
-| `key` | `string`   | `true`   | Your API key           |
-| `id`  | `int`      | `true`   | The `id` of the `user` |
+#### Failure Condition
 
-#### Example JSON Request
+-   User does not exist
+
+#### Example Request
+
+URI: `localhost/admin/profile/get/jdoe`
 
 ```json
-{
-    "key": "383thuy4b34iu3y",
-    "id": 2
-}
+{}
 ```
 
-#### Response
+#### Example Success Response
 
 ```json
 {
@@ -224,125 +555,72 @@ Used to retrieve a specific `user` by it's `id`
         "code": 200
     },
     "response": {
-        "id": 2,
-        "username": "dengklexz",
-        "fullname": "Pak Dengklek",
-        "address": "Sleman, Yogyakarta",
-        "phone": "085151515151",
-        "email": "dengklek@mymail.com",
-        "password": "c3f0a43bb3823...",
-        "is_admin": true,
-        "is_active": true
+        "user": {
+            "id": 1,
+            "username": "jdoe",
+            "fullname": "John Doe",
+            "address": "Mountain View, California",
+            "phone": "0851551225647",
+            "email": "jdoe@examplemail.com",
+            "password": "$2y$10$11W...",
+            "is_admin": 0,
+            "is_active": 0,
+            "created_at": "2022-05-12T09:25:39.000000Z",
+            "updated_at": "2022-05-13T06:39:54.000000Z"
+        }
     }
 }
 ```
 
-#### Response if `user` does not exist
+#### Example Failed Response (User does not exist)
 
 ```json
 {
     "status": {
-        "code": 402,
+        "code": 404,
         "message": "User not found"
     },
-    "response": {}
+    "response": "User not found"
 }
 ```
 
-### Authenticate `user` login <a name="authlogin"></a>
+### `admin-only` Edit a User Profile by ID / Username <a name="end-edituserprofileby"></a>
 
-Used to authenticate logins in the mobile app.
+Edits a user profile of a user by ID / username specified in the **URI**.
 
-| Method | URI              |
-| ------ | ---------------- |
-| `GET`  | `/v1/users/auth` |
+| Method | URI                                       |
+| ------ | ----------------------------------------- |
+| `POST` | `localhost/admin/profile/update/:segment` |
 
-#### Request Parameters
+#### Request Parameter
 
-| Key        | Value Type | Required | Description                       |
-| ---------- | ---------- | -------- | --------------------------------- |
-| `key`      | `string`   | `true`   | Your API key                      |
-| `username` | `string`   | `true`   | The `username` of the `user`      |
-| `password` | `string`   | `true`   | The hashed password of the `user` |
+At least one of the following attibutes should be provided.
 
-#### Example JSON Request
+| Key        | Value Type     | Note |
+| ---------- | -------------- | ---- |
+| `username` | `string`       |      |
+| `fullname` | `string`       |      |
+| `address`  | `string`       |      |
+| `phone`    | `default(int)` |      |
+| `email`    | `string`       |      |
+| `password` | `string`       |      |
+
+#### Failure Condition
+
+-   None of the attributes is provided
+-   Validation failures with the same rules as the [register](#end-register) endpoint.
+
+#### Example Request
+
+URI: `localhost/admin/profile/update/2`
 
 ```json
 {
-    "key": "383thuy4b34iu3y",
-    "username": "dengklexz",
-    "password": "c3f0a43bb3823..."
+    "fullname": "Pippa"
 }
 ```
 
-#### Response, if credentials match
-
-```json
-{
-    "status": {
-        "code": 200
-    },
-    "response": {
-        "id": 2,
-        "username": "dengklexz",
-        "fullname": "Pak Dengklek",
-        "address": "Sleman, Yogyakarta",
-        "phone": "085151515151",
-        "email": "dengklek@mymail.com",
-        "password": "c3f0a43bb3823...",
-        "is_admin": true,
-        "is_active": true
-    }
-}
-```
-
-#### Response, if credentials don't match
-
-```json
-{
-    "status": {
-        "code": 402,
-        "message": "Login doesn't match record"
-    },
-    "response": {}
-}
-```
-
-### Register a `user` <a name="usrreg"></a>
-
-Used to register new accounts.
-
-| Method | URI                  |
-| ------ | -------------------- |
-| `POST` | `/v1/users/register` |
-
-#### Request Parameters
-
-| Key        | Value Type | Required | Description                           |
-| ---------- | ---------- | -------- | ------------------------------------- |
-| `key`      | `string`   | `true`   | Your API key                          |
-| `username` | `string`   | `true`   | Self-explanatory                      |
-| `fullname` | `string`   | `true`   | Self-explanatory                      |
-| `address`  | `string`   | `true`   | Self-explanatory                      |
-| `phone`    | `string`   | `true`   | Self-explanatory                      |
-| `email`    | `string`   | `true`   | Self-explanatory                      |
-| `password` | `string`   | `true`   | The **hashed** password of the `user` |
-
-#### Example JSON Request
-
-```json
-{
-    "key": "383thuy4b34iu3y",
-    "username": "tommy1234",
-    "fullname": "Tom Anderson",
-    "address": "Staten Island, New Jersey",
-    "phone": "678455321147",
-    "email": "tommy@staten.gov.uk",
-    "password": "7f9a63cb34..."
-}
-```
-
-#### Response, if no error occurs
+#### Example Success Response
 
 ```json
 {
@@ -350,152 +628,43 @@ Used to register new accounts.
         "code": 200
     },
     "response": {
-        "success": true,
-        "username": "tommy1234"
+        "new_profile": {
+            "id": 2,
+            "username": "jdoe",
+            "fullname": "Pippa",
+            "address": "Mountain View, California",
+            "phone": "16185309184",
+            "email": "jdoee@example.net",
+            "password": "$2y$10$qBlRcjF9R/WitjEUeIS0t...",
+            "is_admin": 0,
+            "is_active": 0,
+            "created_at": "2022-05-12T16:02:43.000000Z",
+            "updated_at": "2022-06-07T13:49:09.000000Z"
+        }
     }
 }
 ```
 
-#### Possible error scenarios
+#### Example Failed Response (None of the attributes is provided)
 
 ```json
 {
     "status": {
-        "code": 402,
-        "errcode":  ,
-        "message":  ,
-    }
-}
-```
-
-| Message                    | Error Code |
-| -------------------------- | ---------- |
-| Duplicate `email` found    | `0101`     |
-| Duplicate `username` found | `0102`     |
-
-### Update `user`'s account profile <a name="userupdt"></a>
-
-Used to update accounts.
-
-| Method  | URI                    |
-| ------- | ---------------------- |
-| `PATCH` | `/v1/users/update/:id` |
-
-#### Request Parameters
-
-| Key         | Value Type | Required | Description                           |
-| ----------- | ---------- | -------- | ------------------------------------- |
-| `key`       | `string`   | `true`   | Your API key                          |
-| `id`        | `int`      | `true`   | The `id` of user to be updated        |
-| `username`  | `string`   | `false`  | Self-explanatory                      |
-| `fullname`  | `string`   | `false`  | Self-explanatory                      |
-| `address`   | `string`   | `false`  | Self-explanatory                      |
-| `phone`     | `string`   | `false`  | Self-explanatory                      |
-| `email`     | `string`   | `false`  | Self-explanatory                      |
-| `password`  | `string`   | `false`  | The **hashed** password of the `user` |
-| `is_admin`  | `string`   | `false`  | Self-explanatory                      |
-| `is_active` | `string`   | `false`  | Self-explanatory                      |
-
-#### Example JSON Request
-
-```json
-{
-    "key": "383thuy4b34iu3y",
-    "id": 3,
-    "username": "tommy1234",
-    "fullname": "Tom Anderson",
-    "address": "Staten Island, New Jersey",
-    "phone": "678455321147",
-    "email": "tommy@staten.gov.uk",
-    "password": "7f9a63cb34...",
-    "is_active": true
-}
-```
-
-#### Response, if no error occurs
-
-```json
-{
-    "status": {
-        "code": 200
+        "code": 422,
+        "message": "Unprocessable content"
     },
     "response": {
-        "success": true
+        "username": ["Atleast one attribute should be edited!"],
+        "fullname": ["Atleast one attribute should be edited!"],
+        "address": ["Atleast one attribute should be edited!"],
+        "phone": ["Atleast one attribute should be edited!"],
+        "email": ["Atleast one attribute should be edited!"],
+        "password": ["Atleast one attribute should be edited!"]
     }
 }
 ```
-
-#### Possible error scenarios
-
-```json
-{
-    "status": {
-        "code": 402,
-        "errcode":  ,
-        "message":  ,
-    },
-    "response": {}
-}
-```
-
-| Message                    | Error Code |
-| -------------------------- | ---------- |
-| Duplicate `email` found    | `0201`     |
-| Duplicate `username` found | `0202`     |
-
-### Delete `user`'s account <a name="usrdel"></a>
-
-Used to delete existing accounts.
-
-| Method   | URI                    |
-| -------- | ---------------------- |
-| `DELETE` | `/v1/users/delete/:id` |
-
-#### Request Parameters
-
-| Key   | Value Type | Required | Description      |
-| ----- | ---------- | -------- | ---------------- |
-| `key` | `string`   | `true`   | Your API key     |
-| `id`  | `int`      | `true`   | Self-explanatory |
-
-#### Example JSON Request
-
-```json
-{
-    "key": "383thuy4b34iu3y",
-    "id": 3
-}
-```
-
-#### Response, if no error occurs
-
-```json
-{
-    "status": {
-        "code": 200
-    },
-    "response": {
-        "success": true
-    }
-}
-```
-
-#### Possible error scenarios
-
-```json
-{
-    "status": {
-        "code": 402,
-        "errcode":  ,
-        "message":  ,
-    }
-}
-```
-
-| Message                             | Error Code |
-| ----------------------------------- | ---------- |
-| The requested `user` can't be found | `0301`     |
-| The requested `user` is an `admin`  | `0302`     |
 
 <hr />
-<a href="#top" align="center"><h3>Back to top</h3></a>
+<div align="center">
+<h3><a href="#top">Back to top</a></h3>
+</div>
