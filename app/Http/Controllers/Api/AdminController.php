@@ -74,12 +74,14 @@ class AdminController extends Controller {
         }
 
         $edit_request = Validator::make($request->all(), [
-            "username" => "required_without_all:fullname,address,phone,email,password|unique:users|max:255|min:3|alpha_dash",
-            "fullname" => "required_without_all:username,address,phone,email,password|max:255|min:3",
-            "address" => "required_without_all:fullname,username,phone,email,password|max:255",
-            "phone" => "required_without_all:fullname,address,username,email,password|unique:users|numeric|max:999999999999",
-            "email" => "required_without_all:fullname,address,phone,username,password|email:dns|unique:users|max:255",
-            "password" => "required_without_all:fullname,address,phone,email,username",
+            "username" => "required_without_all:fullname,address,phone,email,password,is_admin,is_active|unique:users|max:255|min:3|alpha_dash",
+            "fullname" => "required_without_all:username,address,phone,email,password,is_admin,is_active|max:255|min:3",
+            "address" => "required_without_all:fullname,username,phone,email,password,is_admin,is_active|max:255",
+            "phone" => "required_without_all:fullname,address,username,email,password,is_admin,is_active|unique:users|numeric|max:999999999999",
+            "email" => "required_without_all:fullname,address,phone,username,password,is_admin,is_active|email:dns|unique:users|max:255",
+            "password" => "required_without_all:fullname,address,phone,email,username,is_admin,is_active",
+            "is_admin" => "required_without_all:username,fullname,address,phone,email,password,is_active|boolean",
+            "is_active" => "required_without_all:username,fullname,address,phone,email,password,is_admin|boolean",
         ], [
             "required_without_all" => "Atleast one attribute should be edited!"
         ]);
