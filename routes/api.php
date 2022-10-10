@@ -22,9 +22,11 @@ Route::controller(AccountController::class)->group(function () {
     Route::post("/login", "authenticate");
 });
 
-Route::controller(App\Http\Controllers\DepositController::class)->group(function () {
-    Route::post("/deposit", "store");
- }); 
+Route::middleware('auth:sanctum')->group(function () {
+    Route::controller(App\Http\Controllers\DepositController::class)->group(function () {
+        Route::post("/deposit", "store");
+    }); 
+});
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::controller(AccountController::class)->group(function () {
