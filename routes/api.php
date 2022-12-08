@@ -23,6 +23,12 @@ Route::controller(AccountController::class)->group(function () {
 });
 
 Route::middleware('auth:sanctum')->group(function () {
+    Route::controller(App\Http\Controllers\DepositController::class)->group(function () {
+        Route::post("/deposit", "store");
+    }); 
+});
+
+Route::middleware('auth:sanctum')->group(function () {
     Route::controller(AccountController::class)->group(function () {
         route::get("/logged", "testLogin");
         Route::get("/logout", "invalidate");
